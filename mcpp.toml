@@ -1,0 +1,20 @@
+# libglvnd with mcpp build support.
+#
+# LAYOUT: upstream/ is libglvnd v1.7.0 verbatim and is never touched — updating
+# it is replacing that one directory. Everything this fork adds is under mcpp/,
+# including the dispatch code upstream generates from the Khronos XML registries.
+#
+# WHY THE GENERATED CODE IS CHECKED IN. Upstream runs ~1000 lines of Python over
+# a 2.7 MB gl.xml to emit the dispatch tables. Those tables are deterministic
+# from a pinned registry, so they live in mcpp/generated/ and NO generator runs
+# at build time — no Python, no second build system. mcpp/generated/README.md
+# records the exact commands that produced them.
+#
+# WHY TWO MEMBERS. libGLdispatch.so.0 and libEGL.so.1 are distinct SONAMEs, and
+# mcpp links every library target in a package against all of that package's
+# sources — so one package cannot emit two libraries with disjoint contents.
+[workspace]
+members = [
+    "mcpp/gldispatch",
+    "mcpp/egl",
+]

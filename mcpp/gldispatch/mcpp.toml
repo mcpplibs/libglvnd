@@ -1,0 +1,71 @@
+# freedesktop.gldispatch — libGLdispatch.so.0.
+#
+# GLVND's dispatch core: the table every GL entry point goes through, and the
+# thing that makes one libGL/libEGL work with several vendor drivers in one
+# process. libEGL links it; nothing else in this index does yet.
+#
+# It is its own package because it is its own SONAME. mcpp compiles a package's
+# sources once and links every library target against all of them, so a package
+# cannot emit two libraries with disjoint contents — see freedesktop.wayland for
+# the same split and mcpp's own diagnostic naming the remedy.
+[package]
+namespace   = "freedesktop"
+name        = "gldispatch"
+version     = "1.7.0"
+standard    = "c++23"
+description = "libGLdispatch — GLVND's vendor-neutral GL dispatch core, built from source"
+license     = "MIT"
+repo        = "https://gitlab.freedesktop.org/glvnd/libglvnd"
+
+[build]
+sources = [
+    "../../upstream/src/GLdispatch/GLdispatch.c",
+    # `libglapi`: the dispatch table machinery.
+    "../../upstream/src/GLdispatch/vnd-glapi/mapi_glapi.c",
+    "../../upstream/src/GLdispatch/vnd-glapi/stub.c",
+    "../../upstream/src/GLdispatch/vnd-glapi/table.c",
+    # The per-architecture entry stubs and u_current_*.c come from build.mcpp,
+    # which makes the same choice upstream's `gl_dispatch_type` does — see it.
+    # The utility libraries it links.
+    "../../upstream/src/util/trace.c",
+    "../../upstream/src/util/glvnd_pthread.c",
+    "../../upstream/src/util/app_error_check.c",
+    "../../upstream/src/util/utils_misc.c",
+]
+
+include_dirs = [
+    "../../upstream/include",
+    "../../upstream/src/util",
+    "../../upstream/src/GLdispatch",
+    "../../upstream/src/GLdispatch/vnd-glapi",
+    "../generated",
+]
+
+# libglvnd has no generated config.h: meson passes everything as -D, and these
+# are the values for linux/glibc/x86_64.
+#
+# MAPI_ABI_HEADER names the generated dispatch table, and is used as
+# `#include MAPI_ABI_HEADER` — so it must expand to a header-name token.
+# Angle brackets rather than escaped quotes: the inner quotes do not survive
+# the trip to the compiler, and the failure is a confusing
+# `'#include' expects "FILENAME" or <FILENAME>` inside upstream's mapi_tmp.h.
+cflags = [
+    "-D_GNU_SOURCE",
+    # `typeof` is a GNU spelling and -std=c11 does not have it. mcpp accepts
+    # `c_standard = "gnu11"` and still emits -std=c11 (visible in
+    # compile_commands.json), so the dialect has to come through -D instead.
+    "-Dtypeof=__typeof__",
+    "-DMAPI_ABI_HEADER=\\\"glapi_mapi_tmp.h\\\"",
+    "-DUSE_ATTRIBUTE_CONSTRUCTOR",
+    "-DHAVE_SYNC_INTRINSICS",
+    "-DHAVE_MINCORE",
+    "-DHAVE_RTLD_NOLOAD",
+    "-DHAVE_DIRENT_DTYPE",
+    "-DHAVE_PTHREAD_RWLOCK_T",
+    "-fPIC",
+    "-fvisibility=hidden",
+]
+
+[targets.GLdispatch]
+kind   = "shared"
+soname = "libGLdispatch.so.0"

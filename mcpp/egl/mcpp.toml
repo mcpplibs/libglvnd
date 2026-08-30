@@ -1,0 +1,89 @@
+# freedesktop.egl — libEGL.so.1, plus `import egl;`.
+#
+# GLVND's vendor-neutral EGL dispatch: the libEGL.so.1 an application links,
+# which dlopens the actual vendor implementation (Mesa's libEGL_mesa, NVIDIA's
+# driver) named by a JSON file. It MUST be the only libEGL.so.1 in a process —
+# being the single dispatch point is the whole reason GLVND exists.
+#
+# WHERE THE VENDORS COME FROM. libglvnd compiles in
+# DEFAULT_EGL_VENDOR_CONFIG_DIRS, which is `<prefix>/share/glvnd/egl_vendor.d`
+# — right on a distribution, wrong the moment the payload is relocated, the
+# same shape as libgbm's compiled-in backend path. The mechanism to fix it is
+# libglvnd's own (`__EGL_VENDOR_LIBRARY_DIRS`) and the job belongs to the
+# ENVIRONMENT: `xim:mesa` declares it through the graphics discovery layer
+# (openxlings/xim-pkgindex#713) and mcpp carries subos declarations into the
+# processes it launches. So this package sets nothing, and a consumer finds
+# 50_mesa.json without asking.
+[package]
+namespace   = "freedesktop"
+name        = "egl"
+version     = "1.7.0"
+standard    = "c++23"
+description = "libEGL — GLVND's vendor-neutral EGL dispatch, built from source, with a C++23 module"
+license     = "MIT"
+repo        = "https://gitlab.freedesktop.org/glvnd/libglvnd"
+
+[build]
+sources = [
+    "../../upstream/src/EGL/libegl.c",
+    "../../upstream/src/EGL/libeglcurrent.c",
+    "../../upstream/src/EGL/libeglmapping.c",
+    "../../upstream/src/EGL/libeglvendor.c",
+    "../../upstream/src/EGL/libeglerror.c",
+    # The dispatch stubs: a hand-written half and a generated half.
+    "../../upstream/src/EGL/egldispatchstubs.c",
+    "../generated/g_egldispatchstubs.c",
+    # The utility libraries libEGL links.
+    "../../upstream/src/util/trace.c",
+    "../../upstream/src/util/glvnd_pthread.c",
+    "../../upstream/src/util/utils_misc.c",
+    "../../upstream/src/util/app_error_check.c",
+    "../../upstream/src/util/winsys_dispatch.c",
+    "../../upstream/src/util/cJSON.c",
+    # the module wrapper
+    "src/egl.cppm",
+]
+
+include_dirs = [
+    "../../upstream/include",
+    "../../upstream/src/util",
+    "../../upstream/src/EGL",
+    "../../upstream/src/GLdispatch",
+    "../../upstream/src/util/uthash/src",
+    "../generated",
+]
+
+cflags = [
+    "-D_GNU_SOURCE",
+    # The compile-time FALLBACK for the vendor search path, and deliberately
+    # EMPTY. libeglvendor.c reads __EGL_VENDOR_LIBRARY_DIRS first and only falls
+    # back to this; upstream's default is `<prefix>/share/glvnd/egl_vendor.d`,
+    # which after relocation means the HOST's directory. An empty fallback makes
+    # a missing ecosystem declaration show up as "no vendor found" instead of as
+    # silently loading the host's driver into a sandboxed process — the same
+    # stance compat.libgbm takes with GBM_BACKENDS_PATH.
+    "-DDEFAULT_EGL_VENDOR_CONFIG_DIRS=\\\"\\\"",
+    # see freedesktop.gldispatch for why the dialect arrives as a -D
+    "-Dtypeof=__typeof__",
+    "-DUSE_ATTRIBUTE_CONSTRUCTOR",
+    "-DHAVE_SYNC_INTRINSICS",
+    "-DHAVE_MINCORE",
+    "-DHAVE_RTLD_NOLOAD",
+    "-DHAVE_DIRENT_DTYPE",
+    "-DHAVE_PTHREAD_RWLOCK_T",
+    # ENABLE_EGL_X11 is deliberately NOT set: the X11 platform would pull Xorg
+    # into every consumer, including the headless GBM ones that have no display
+    # at all. compat.x11 is in the index for a project that wants it.
+    "-fPIC",
+    "-fvisibility=hidden",
+]
+
+[lib]
+path = "src/egl.cppm"
+
+[targets.EGL]
+kind   = "shared"
+soname = "libEGL.so.1"
+
+[dependencies]
+freedesktop.gldispatch = "1.7.0"

@@ -1,0 +1,67 @@
+// Pick the dispatch stub flavour for the target, the way upstream's meson does.
+//
+// GLdispatch's entry stubs are per-architecture AND per-thread-storage-model,
+// and unlike libffi's the files carry no guards of their own — upstream selects
+// them with `gl_dispatch_type`. Hard-coding one set in the manifest would make
+// this package x86_64-only and would say so nowhere; doing it here keeps the
+// selection where the target is actually known, so aarch64 and ppc64 work by
+// construction rather than by a later edit.
+//
+// Transcribed from upstream/meson.build:140-168.
+#include <cstdio>
+#include <string>
+
+import mcpp;
+
+int main()
+{
+    const std::string arch = mcpp::target_arch();
+    const std::string env  = mcpp::target_env();
+
+    // TLS asm needs initial-exec, which upstream only trusts on glibc and
+    // FreeBSD; everything else uses thread-specific-data stubs.
+    const bool tls = (env == "gnu");
+    const std::string thread = tls ? "tls" : "tsd";
+
+    std::string type;
+    if (arch == "x86_64" || arch == "i386" || arch == "i686") {
+        type = (arch == "x86_64" ? "x86_64_" : "x86_") + thread;
+    } else if (arch == "aarch64") {
+        type = "aarch64_tsd";
+    } else if (arch.rfind("arm", 0) == 0) {
+        type = "armv7_tsd";
+    } else if (arch.rfind("powerpc64", 0) == 0 || arch == "ppc64") {
+        type = "ppc64_" + thread;
+    } else {
+        // No assembly stubs for this architecture: upstream falls back to the
+        // portable C path rather than failing, and so does this.
+        type = "pure_c";
+    }
+
+    const std::string dir =
+        std::string(mcpp::manifest_dir()) + "/../../upstream/src/GLdispatch/vnd-glapi/";
+
+    if (type == "pure_c") {
+        mcpp::source((dir + "entry_pure_c.c").c_str());
+    } else {
+        mcpp::source((dir + "entry_common.c").c_str());
+        if (type != "armv7_tsd") {
+            mcpp::source((dir + "entry_simple_asm.c").c_str());
+        }
+        mcpp::source((dir + "entry_" + type + ".c").c_str());
+        mcpp::define("USE_DISPATCH_ASM");
+        if (arch == "x86_64") {
+            mcpp::define("USE_X86_64_ASM");
+        } else if (arch == "i386" || arch == "i686") {
+            mcpp::define("USE_X86_ASM");
+        }
+    }
+
+    // The thread-storage half of the same choice.
+    mcpp::source((dir + (tls ? "u_current_tls.c" : "u_current_tsd.c")).c_str());
+    if (tls) {
+        mcpp::define("GLDISPATCH_USE_TLS");
+    }
+
+    std::printf("gl dispatch stub type: %s\n", type.c_str());
+}
