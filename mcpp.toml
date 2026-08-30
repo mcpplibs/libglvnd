@@ -17,4 +17,7 @@
 members = [
     "mcpp/gldispatch",
     "mcpp/egl",
+    "mcpp/glesv2",
+    "mcpp/glesv1",
+    "mcpp/opengl",
 ]

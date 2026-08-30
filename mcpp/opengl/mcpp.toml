@@ -1,0 +1,85 @@
+# freedesktop.opengl — libOpenGL.so.0.
+#
+# libOpenGL — the version-neutral OpenGL entry points, dispatched through GLVND
+#
+# WHAT THIS MEMBER IS, IN UPSTREAM'S TERMS
+#
+# `src/OpenGL/meson.build` builds it as
+#
+#     shared_library('OpenGL', link_whole: libopengl_main,
+#                    dependencies: [idep_gldispatch, idep_utils_misc,
+#                                   idep_glapi_opengl])
+#
+# so it is three things: upstream's `libopengl.c`, the per-API dispatch table
+# `idep_glapi_opengl`, and a link against libGLdispatch. All three are below.
+#
+# WHY IT IS ITS OWN MEMBER RATHER THAN A TARGET IN mcpp/gldispatch
+#
+# `stub.c` and the per-arch entry stubs are compiled TWICE with different
+# macros: once inside libGLdispatch (`libglapi`, full dispatch) and once per
+# API flavour here (`-DSTATIC_DISPATCH_ONLY` plus a different
+# `MAPI_ABI_HEADER`). mcpp compiles a package's sources once and links every
+# library target against all of them, so one package cannot do both — the same
+# constraint that splits freedesktop.wayland into four.
+[package]
+namespace   = "freedesktop"
+name        = "opengl"
+version     = "1.7.0"
+standard    = "c++23"
+description = "libOpenGL — the version-neutral OpenGL entry points, dispatched through GLVND"
+license     = "MIT"
+repo        = "https://gitlab.freedesktop.org/glvnd/libglvnd"
+
+[build]
+sources = [
+    # link_whole : libopengl_main
+    "../../upstream/src/OpenGL/libopengl.c",
+    # idep_glapi_opengl — the per-API dispatch, minus the entry stubs, which are
+    # per-architecture and therefore chosen in build.mcpp.
+    "../../upstream/src/GLdispatch/vnd-glapi/stub.c",
+    # idep_utils_misc
+    "../../upstream/src/util/utils_misc.c",
+    # the module wrapper
+    "src/opengl.cppm",
+]
+
+include_dirs = [
+    "../../upstream/include",
+    "../../upstream/src/util",
+    "../../upstream/src/GLdispatch",
+    "../../upstream/src/GLdispatch/vnd-glapi",
+    "../generated",
+]
+
+cflags = [
+    "-D_GNU_SOURCE",
+    # see freedesktop.gldispatch for why the GNU dialect arrives as a -D
+    "-Dtypeof=__typeof__",
+    # THE TWO THAT MAKE THIS MEMBER WHAT IT IS. STATIC_DISPATCH_ONLY compiles
+    # stub.c down to the static half; MAPI_ABI_HEADER picks WHICH API's table
+    # gets built in. Change only these two and this member becomes a different
+    # GL library.
+    "-DSTATIC_DISPATCH_ONLY",
+    "-DMAPI_ABI_HEADER=\\\"g_glapi_mapi_opengl_tmp.h\\\"",
+    "-DUSE_ATTRIBUTE_CONSTRUCTOR",
+    "-DHAVE_SYNC_INTRINSICS",
+    "-DHAVE_MINCORE",
+    "-DHAVE_RTLD_NOLOAD",
+    "-DHAVE_DIRENT_DTYPE",
+    "-DHAVE_PTHREAD_RWLOCK_T",
+    "-fPIC",
+    "-fvisibility=hidden",
+]
+
+[lib]
+path = "src/opengl.cppm"
+
+[targets.OpenGL]
+kind   = "shared"
+soname = "libOpenGL.so.0"
+
+# The dispatch, by PATH — see mcpp/egl/mcpp.toml for why the sibling member
+# rather than a second index entry. It matters more here: every GL entry point
+# in this library routes through libGLdispatch, so the two must be one build.
+[dependencies]
+freedesktop.gldispatch = { path = "../gldispatch" }

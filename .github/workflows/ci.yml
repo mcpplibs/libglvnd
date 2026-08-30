@@ -55,8 +55,12 @@ jobs:
           mcpp --version
           mcpp build --workspace
 
-      - name: libEGL initialises and reaches GLdispatch
-        run: mcpp test -p mcpp/egl
+      - name: every member's test
+        run: |
+          for m in egl glesv2 glesv1 opengl; do
+            echo "── mcpp/$m ──"
+            mcpp test -p "mcpp/$m"
+          done
 
       # Artifacts are located by searching the tree: where a workspace build
       # puts its output is mcpp's business and has moved between versions.
@@ -85,13 +89,58 @@ jobs:
             __glDispatchInit __glDispatchMakeCurrent __glDispatchNewVendorID
           check libEGL.so libEGL.so.1 \
             eglInitialize eglQueryString eglGetProcAddress eglGetPlatformDisplay
+          # The GL family. Each symbol named here is one that only that API's
+          # dispatch table can supply, so a table swapped between members would
+          # fail rather than build a plausible-looking wrong library.
+          check libGLESv2.so libGLESv2.so.2 \
+            glClear glCreateShader glDrawArrays glTexImage2D
+          check libGLESv1_CM.so libGLESv1_CM.so.1 \
+            glClear glMatrixMode glOrthof glEnableClientState
+          check libOpenGL.so libOpenGL.so.0 \
+            glClear glGenVertexArrays glDrawElements glUseProgram
+
+      # The GL libraries must not carry each other's APIs. GLESv1_CM is the
+      # fixed-function profile and GLESv2 is the shader one; if a member picked
+      # up the wrong MAPI_ABI_HEADER both would still link, both would export
+      # ~the right number of symbols, and only this tells them apart.
+      - name: the GL profiles do not overlap
+        run: |
+          has() { readelf --dyn-syms -W "$1" | grep -qE " FUNC .* $2\$"; }
+          v1=$(find . -name libGLESv1_CM.so -type f | head -1)
+          v2=$(find . -name libGLESv2.so -type f | head -1)
+          if has "$v1" glCreateShader; then
+            echo "::error::libGLESv1_CM exports the SHADER api — wrong dispatch table"; exit 1
+          fi
+          if has "$v2" glMatrixMode; then
+            echo "::error::libGLESv2 exports the FIXED-FUNCTION api — wrong dispatch table"; exit 1
+          fi
+          echo "GLESv1_CM and GLESv2 carry disjoint profiles"
+
+      # The module export lists are generated from the headers INTERSECTED with
+      # the built libraries, so they can drift the moment either moves.
+      - name: the GL module wrappers match the generator
+        run: |
+          set -- "glesv2:GLES3/gl32.h:libGLESv2.so" \
+                 "glesv1:GLES/gl.h:libGLESv1_CM.so" \
+                 "opengl:GL/glcorearb.h:libOpenGL.so"
+          for spec in "$@"; do
+            g=${spec%%:*}; rest=${spec#*:}; h=${rest%%:*}; l=${rest#*:}
+            so=$(find . -name "$l" -type f | head -1)
+            mcpp/tools/genglmod.sh "$g" "$h" "$so" "mcpp/$g/src/$g.cppm"
+          done
+          if ! git diff --quiet; then
+            echo "::error::GL module wrappers are out of date — run mcpp/tools/genglmod.sh"
+            git diff --stat
+            exit 1
+          fi
+          echo "GL module wrappers match the headers and the built libraries"
 
       # The same question from the other side: how many TUs did each member
       # actually compile? A dropped `sources` entry leaves the link green and
       # the library short, and the symbol check above only covers what it names.
       - name: every declared source became an object
         run: |
-          for m in gldispatch egl; do
+          for m in gldispatch egl glesv2 glesv1 opengl; do
             n=$(find "mcpp/$m/target" -name '*.o' | wc -l)
             echo "mcpp/$m compiled $n object(s)"
             if [ "$n" -lt 10 ]; then
@@ -115,11 +164,16 @@ jobs:
           fi
           echo "libEGL -> libGLdispatch, and nothing windowing"
 
-      - name: the egl module produced an interface
+      - name: every module produced an interface
         run: |
-          find . \( -name 'khronos.egl.gcm' -o -name 'khronos.egl.pcm' \) | head -1 | grep -q . \
-            || { echo "::error::no module interface for egl"; find . -name '*.gcm' -o -name '*.pcm'; exit 1; }
-          echo "egl module interface ok"
+          for m in khronos.egl khronos.glesv2 khronos.glesv1 khronos.opengl; do
+            if ! find . \( -name "$m.gcm" -o -name "$m.pcm" \) | head -1 | grep -q .; then
+              echo "::error::no module interface for $m"
+              find . \( -name '*.gcm' -o -name '*.pcm' \) | sed 's|.*/||' | sort -u
+              exit 1
+            fi
+            echo "$m ok"
+          done
 
   generated:
     name: mcpp/generated/ matches upstream's generators
@@ -135,8 +189,18 @@ jobs:
           python3 gen_gldispatch_mapi.py gldispatch xml/gl.xml xml/gl_other.xml > /tmp/glapi_mapi_tmp.h
           python3 gen_egl_dispatch.py header xml/egl.xml > /tmp/g_egldispatchstubs.h
           python3 gen_egl_dispatch.py source xml/egl.xml > /tmp/g_egldispatchstubs.c
+          # One table per API flavour, exactly as upstream's
+          # src/generate/meson.build `foreach` does. g_glapi_mapi_gl_tmp.h is
+          # NOT here on purpose: it is libGL's, libGL needs X11, and this fork
+          # builds only the three window-system-free libraries.
+          for g in opengl glesv1 glesv2; do
+            python3 gen_gldispatch_mapi.py "$g" xml/gl.xml xml/gl_other.xml \
+              > "/tmp/g_glapi_mapi_${g}_tmp.h"
+          done
           cd "$GITHUB_WORKSPACE"
-          for f in glapi_mapi_tmp.h g_egldispatchstubs.h g_egldispatchstubs.c; do
+          for f in glapi_mapi_tmp.h g_egldispatchstubs.h g_egldispatchstubs.c \
+                   g_glapi_mapi_opengl_tmp.h g_glapi_mapi_glesv1_tmp.h \
+                   g_glapi_mapi_glesv2_tmp.h; do
             if ! diff -q "/tmp/$f" "mcpp/generated/$f" >/dev/null; then
               echo "::error file=mcpp/generated/$f::out of date — see mcpp/generated/README.md"
               diff "/tmp/$f" "mcpp/generated/$f" | head -20

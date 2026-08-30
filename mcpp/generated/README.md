@@ -34,3 +34,25 @@ table is.
 The tables for `libOpenGL`, `libGLESv1`, `libGLESv2` and `libGL`/`libGLX`.
 Nothing in this index builds those libraries yet; adding one means adding its
 table here and a member for it.
+
+## The per-API dispatch tables
+
+`libGLESv2`, `libGLESv1_CM` and `libOpenGL` each need their own table — the
+same generator, a different first argument, which is exactly what upstream's
+`src/generate/meson.build` does in a `foreach`:
+
+```bash
+cd upstream/src/generate
+for g in opengl glesv1 glesv2; do
+    python3 gen_gldispatch_mapi.py "$g" xml/gl.xml xml/gl_other.xml \
+        > "../../../mcpp/generated/g_glapi_mapi_${g}_tmp.h"
+done
+```
+
+`g_glapi_mapi_gl_tmp.h` (libGL's) is deliberately absent: libGL needs X11, this
+fork does not build it, and the table is 2.9 MB. Its recipe differs too — the
+symbol list comes from `../GL/gl.symbols` rather than from the XML:
+
+```bash
+python3 gen_gldispatch_mapi.py ../GL/gl.symbols xml/gl.xml xml/gl_other.xml
+```

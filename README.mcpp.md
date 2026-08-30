@@ -7,7 +7,10 @@ support. One package reaches
 | member | output | published as |
 |---|---|---|
 | `mcpp/egl` | `libEGL.so.1` + `import khronos.egl;` | `freedesktop.egl` |
-| `mcpp/gldispatch` | `libGLdispatch.so.0` | internal — a path dependency of `mcpp/egl` |
+| `mcpp/glesv2` | `libGLESv2.so.2` + `import khronos.glesv2;` | `freedesktop.glesv2` |
+| `mcpp/glesv1` | `libGLESv1_CM.so.1` + `import khronos.glesv1;` | `freedesktop.glesv1` |
+| `mcpp/opengl` | `libOpenGL.so.0` + `import khronos.opengl;` | `freedesktop.opengl` |
+| `mcpp/gldispatch` | `libGLdispatch.so.0` | internal — a path dependency of the four above |
 
 ```bash
 mcpp build --workspace
@@ -77,5 +80,13 @@ needing an edit.
 
 ## Not built here
 
-`libGL`, `libGLX`, `libOpenGL`, `libGLESv1`, `libGLESv2`. Nothing in the index
-needs them yet; each is a member plus its dispatch table in `mcpp/generated/`.
+`libGL` and `libGLX`, and only those two — because they are the two that need
+X11 (`dep_x11`, `dep_xext`, `dep_glproto`; libGL reaches it through libGLX).
+Building them would put Xorg in the dependency graph of every consumer,
+including the headless GBM ones that have no display at all.
+
+The three window-system-free libraries ARE built, and they are what a Wayland
+compositor needs: it takes a context through EGL and draws with GLES2. When an
+X11 consumer wants libGL, `compat.x11` / `compat.xext` / `compat.xorgproto` are
+already in the index and the work is one more member plus
+`g_glapi_mapi_gl_tmp.h`.
