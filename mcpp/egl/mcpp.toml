@@ -85,5 +85,20 @@ path = "src/egl.cppm"
 kind   = "shared"
 soname = "libEGL.so.1"
 
+# A PATH dependency on the sibling member, not an index one, and that is a
+# deliberate choice rather than a convenience.
+#
+# libGLdispatch.so.0 is a SONAME, and GLVND's entire purpose is to be the ONE
+# dispatch point in a process. If `freedesktop.gldispatch` were also an index
+# entry, a consumer that named both it and this package would resolve two
+# package instances, each building its own libGLdispatch.so.0. Soname reuse
+# means only one is ever mapped, so nothing would report the duplicate — the
+# second build would just be dead weight the closure carries, and which one
+# won would depend on link order. compat.glx-headers records the same hazard
+# for a header directory; for a dispatch SONAME it matters more.
+#
+# `../gldispatch` resolves inside the extracted tarball — the release carries
+# both members — so this works identically for the fork's own CI and for a
+# consumer installing from the index.
 [dependencies]
-freedesktop.gldispatch = "1.7.0"
+freedesktop.gldispatch = { path = "../gldispatch" }

@@ -1,16 +1,25 @@
 # mcpplibs/libglvnd
 
 [libglvnd](https://gitlab.freedesktop.org/glvnd/libglvnd) v1.7.0 with mcpp build
-support. Consumed from [mcpp-index](https://github.com/mcpplibs/mcpp-index):
+support. One package reaches
+[mcpp-index](https://github.com/mcpplibs/mcpp-index):
 
-| package | output |
-|---|---|
-| `freedesktop.gldispatch` | `libGLdispatch.so.0` — GLVND's dispatch core |
-| `freedesktop.egl` | `libEGL.so.1` + `import egl;` |
+| member | output | published as |
+|---|---|---|
+| `mcpp/egl` | `libEGL.so.1` + `import egl;` | `freedesktop.egl` |
+| `mcpp/gldispatch` | `libGLdispatch.so.0` | internal — a path dependency of `mcpp/egl` |
 
 ```bash
 mcpp build --workspace
 ```
+
+`gldispatch` is a member rather than a second index entry on purpose. It is a
+SONAME, and being the *one* dispatch point in a process is GLVND's whole reason
+to exist; two index entries would let a consumer name both and resolve two
+package instances, each building its own `libGLdispatch.so.0`. Soname reuse
+means only one is ever mapped, so nothing would report the duplicate. It becomes
+a published entry the day something other than libEGL needs it — `libGL` and
+`libGLX` would.
 
 ## The module adds no API
 

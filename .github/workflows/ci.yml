@@ -48,15 +48,44 @@ jobs:
 
       # Artifacts are located by searching the tree: where a workspace build
       # puts its output is mcpp's business and has moved between versions.
-      - name: both libraries carry the canonical SONAMEs
+      #
+      # A SONAME check alone would pass on an EMPTY library — mcpp can link a
+      # .so out of zero objects and report success — so each library is also
+      # asked for symbols only its own sources define.
+      - name: both libraries carry the canonical SONAMEs, and real contents
         run: |
-          for pair in "libGLdispatch.so:libGLdispatch.so.0" "libEGL.so:libEGL.so.1"; do
-            file=${pair%%:*}; want=${pair#*:}
+          check() {
+            file=$1; want=$2; shift 2
             so=$(find . -name "$file" -type f | head -1)
             if [ -z "$so" ]; then echo "::error::$file was not built"; find . -name '*.so*' -type f; exit 1; fi
             got=$(readelf -d "$so" | sed -n 's/.*SONAME.*\[\(.*\)\]/\1/p')
-            echo "$file -> $got"
-            test "$got" = "$want" || { echo "::error::expected $want"; exit 1; }
+            echo "$file -> SONAME $got, $(stat -c%s "$so") bytes"
+            if [ "$got" != "$want" ]; then echo "::error::expected SONAME $want"; exit 1; fi
+            for sym in "$@"; do
+              if ! readelf --dyn-syms -W "$so" | grep -qE " (FUNC|OBJECT) .* $sym$"; then
+                echo "::error::$file does not define $sym — it linked, but out of what?"
+                readelf --dyn-syms -W "$so" | head -30; exit 1
+              fi
+            done
+            echo "   defines: $*"
+          }
+          check libGLdispatch.so libGLdispatch.so.0 \
+            __glDispatchInit __glDispatchMakeCurrent __glDispatchNewVendorID
+          check libEGL.so libEGL.so.1 \
+            eglInitialize eglQueryString eglGetProcAddress eglGetPlatformDisplay
+
+      # The same question from the other side: how many TUs did each member
+      # actually compile? A dropped `sources` entry leaves the link green and
+      # the library short, and the symbol check above only covers what it names.
+      - name: every declared source became an object
+        run: |
+          for m in gldispatch egl; do
+            n=$(find "mcpp/$m/target" -name '*.o' | wc -l)
+            echo "mcpp/$m compiled $n object(s)"
+            if [ "$n" -lt 10 ]; then
+              echo "::error::mcpp/$m compiled only $n objects; the manifest declares far more"
+              find "mcpp/$m/target" -name '*.o'; exit 1
+            fi
           done
 
       - name: libEGL links GLdispatch, and reaches no host library
