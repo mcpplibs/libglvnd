@@ -1,4 +1,4 @@
-# freedesktop.egl — libEGL.so.1, plus `import egl;`.
+# freedesktop.egl — libEGL.so.1, plus `import khronos.egl;`.
 #
 # GLVND's vendor-neutral EGL dispatch: the libEGL.so.1 an application links,
 # which dlopens the actual vendor implementation (Mesa's libEGL_mesa, NVIDIA's

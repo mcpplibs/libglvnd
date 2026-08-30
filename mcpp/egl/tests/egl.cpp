@@ -2,7 +2,7 @@
 //
 // This file includes <EGL/egl.h> for the EGL_* CONSTANTS — they are macros and
 // no module can export them — but every FUNCTION and TYPE it uses comes from
-// `import egl;`. If an entry point were missing from the export list this would
+// `import khronos.egl;`. If an entry point were missing from the export list this would
 // not link; if the module named something upstream does not, it would not
 // compile.
 //
@@ -33,7 +33,7 @@
 #include <cstdlib>
 #include <cstring>
 
-import egl;
+import khronos.egl;
 
 namespace {
 
@@ -50,7 +50,7 @@ void check(bool ok, const char *what)
 int main()
 {
     // ── 1. The module carries the API ────────────────────────────────────
-    // EGLDisplay, EGLint, eglQueryString … all arrive through `import egl;`.
+    // EGLDisplay, EGLint, eglQueryString … all arrive through `import khronos.egl;`.
     // Reaching this line means the export list covers what the file uses.
     EGLDisplay none = EGL_NO_DISPLAY;
     check(none == EGL_NO_DISPLAY, "EGLDisplay and EGL_NO_DISPLAY agree");

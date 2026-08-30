@@ -6,7 +6,7 @@ support. One package reaches
 
 | member | output | published as |
 |---|---|---|
-| `mcpp/egl` | `libEGL.so.1` + `import egl;` | `freedesktop.egl` |
+| `mcpp/egl` | `libEGL.so.1` + `import khronos.egl;` | `freedesktop.egl` |
 | `mcpp/gldispatch` | `libGLdispatch.so.0` | internal — a path dependency of `mcpp/egl` |
 
 ```bash
@@ -23,7 +23,7 @@ a published entry the day something other than libEGL needs it — `libGL` and
 
 ## The module adds no API
 
-`import egl;` replaces `#include <EGL/egl.h>` and changes nothing else — every
+`import khronos.egl;` replaces `#include <EGL/egl.h>` and changes nothing else — every
 exported name is upstream's, spelled upstream's way, so code written against
 the C header ports by swapping one line. The export list is **generated from
 the header**, so a version bump cannot quietly drop a name.

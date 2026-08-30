@@ -23,9 +23,21 @@ jobs:
       # XLINGS_NON_INTERACTIVE is required: without it the installer takes its
       # `curl | bash` branch and runs `xlings self install < /dev/tty`, and a
       # runner's /dev/tty is readable but not connected.
+      #
+      # XLINGS_VERSION PINS THE INSTALLER. Unpinned, this step took whatever
+      # was newest that morning, so a red run could not be told apart from an
+      # ecosystem change — the one thing a fork's CI exists to rule out. The
+      # installer reads `${1:-${XLINGS_VERSION:-}}`, so the environment form
+      # pins it without changing the `curl | bash` shape.
+      #
+      # mcpp itself stays UNPINNED on purpose: this package depends on the
+      # ECOSYSTEM (`xim:mesa` declaring __EGL_VENDOR_LIBRARY_DIRS), and a
+      # pinned mcpp tarball carries a frozen snapshot of it. Pin the tool that
+      # installs, float the ecosystem under test.
       - name: Install xlings + mcpp
         env:
           XLINGS_NON_INTERACTIVE: "1"
+          XLINGS_VERSION: "2026.8.27.4"
         run: |
           curl -fsSL https://d2learn.org/xlings-install.sh | bash
           echo "$HOME/.xlings/bin" >> "$GITHUB_PATH"
@@ -105,7 +117,7 @@ jobs:
 
       - name: the egl module produced an interface
         run: |
-          find . \( -name 'egl.gcm' -o -name 'egl.pcm' \) | head -1 | grep -q . \
+          find . \( -name 'khronos.egl.gcm' -o -name 'khronos.egl.pcm' \) | head -1 | grep -q . \
             || { echo "::error::no module interface for egl"; find . -name '*.gcm' -o -name '*.pcm'; exit 1; }
           echo "egl module interface ok"
 

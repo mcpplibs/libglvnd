@@ -1,7 +1,7 @@
 // egl — libEGL, as a C++23 module.
 //
 // A module wrapper and nothing more: every name below is upstream's, spelled
-// upstream's way. `import egl;` replaces `#include <EGL/egl.h>` and changes
+// upstream's way. `import khronos.egl;` replaces `#include <EGL/egl.h>` and changes
 // nothing else, so code written against the C header ports by swapping one
 // line.
 //
@@ -24,7 +24,7 @@ module;
 
 #include <EGL/egl.h>
 
-export module egl;
+export module khronos.egl;
 
 export {
 
