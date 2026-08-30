@@ -31,6 +31,13 @@
 #   e.g. genglmod.sh glesv2 GLES3/gl32.h <path>/libGLESv2.so mcpp/glesv2/src/glesv2.cppm
 set -eu
 
+# LC_ALL=C, and this is not cosmetic. `sort` orders mixed-case identifiers
+# differently under a UTF-8 locale than under C, so the same inputs produce a
+# different FILE on a developer machine than on a CI runner — same symbol
+# count, different order, and the drift check fails with a diff that looks like
+# nothing changed. Measured: 48 lines of glesv2.cppm.
+export LC_ALL=C
+
 FLAVOUR="$1"      # glesv2 | glesv1 | opengl
 HEADER="$2"       # header path RELATIVE to upstream/include
 LIB="$3"          # the built .so, for the intersection
